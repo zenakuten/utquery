@@ -5,3 +5,4 @@ pkg/
 utquery/
 imgui.ini
 utquery-git-*.tar.zst
+src/vcpkg
