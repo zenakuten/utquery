@@ -13,7 +13,16 @@ cmake --preset default
 cmake --build build
 ```
 
-### Arch Linux
+### Linux
+
+Requires [vcpkg](https://github.com/microsoft/vcpkg) and CMake.
+
+```
+cmake -B build -DCMAKE_TOOLCHAIN_FILE=/path/to/vcpkg/scripts/buildsystems/vcpkg.cmake
+cmake --build build
+```
+
+### Arch Linux (package install)
 
 ```
 makepkg -si
