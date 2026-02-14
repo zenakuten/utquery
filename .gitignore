@@ -1,3 +1,7 @@
-build
+build/
 .fuse_*
 settings.local.json
+pkg/
+utquery/
+imgui.ini
+utquery-git-*.tar.zst
