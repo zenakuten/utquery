@@ -6,3 +6,4 @@ utquery/
 imgui.ini
 utquery-git-*.tar.zst
 src/vcpkg
+servers.json
