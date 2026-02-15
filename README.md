@@ -10,6 +10,25 @@ You will need a valid `cdkey` file (not provided) in the same folder as the exec
 ### Windows
 The app will read your installed key, if not found will try to read from `cdkey` file.  
 
+### Command line options
+
+```
+Options:
+  --help                Show this help message and exit
+  --query <servers>     Query servers and output JSON to stdout
+                        <servers> is a comma-separated list of host:port
+                        If port is omitted, 7777 is assumed
+  --file <path>         Write JSON output to a file instead of stdout
+                        (used with --query)
+
+Examples:
+  utquery --query 192.168.1.1:7777,10.0.0.1,example.com:7778
+  utquery --query myserver.com
+  utquery --query myserver.com --file results.json
+
+If no options are given, the GUI server browser is launched.
+```
+
 ## Building
 
 ### Windows
