@@ -8,6 +8,7 @@
 struct PlayerInfo {
     std::string name;
     int32_t score;
+    int team = -1; // 0=red, 1=blue, 2=spectator, -1=unknown
 };
 
 struct ServerInfo {

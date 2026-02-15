@@ -12,6 +12,7 @@ add_executable(utquery
     src/main.cpp
     src/query.cpp
     src/app.cpp
+    src/master.cpp
 )
 
 if(WIN32)

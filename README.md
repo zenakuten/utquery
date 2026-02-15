@@ -2,6 +2,10 @@
 
 ![image](doc/utquery.png)
 
+## Running
+
+You will need a valid `cdkey` file (not provided) in the same folder as the executable for the internet tab to function.
+
 ## Building
 
 ### Windows
@@ -15,10 +19,16 @@ cmake --build build
 
 ### Linux
 
-Requires [vcpkg](https://github.com/microsoft/vcpkg) and CMake.
+Requires CMake. Clone [vcpkg](https://github.com/microsoft/vcpkg) if you don't have it:
 
 ```
-cmake -B build -DCMAKE_TOOLCHAIN_FILE=/path/to/vcpkg/scripts/buildsystems/vcpkg.cmake
+git clone https://github.com/microsoft/vcpkg.git
+```
+
+Then build:
+
+```
+cmake -B build --fresh -DCMAKE_TOOLCHAIN_FILE=vcpkg/scripts/buildsystems/vcpkg.cmake
 cmake --build build
 ```
 
