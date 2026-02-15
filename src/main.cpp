@@ -2,17 +2,23 @@
 #include "query.h"
 #include "utcolor.h"
 
+#define SDL_MAIN_HANDLED
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
 #include <imgui.h>
 #include <imgui_impl_sdl3.h>
 #include <imgui_impl_sdlrenderer3.h>
 
+#include <nlohmann/json.hpp>
+
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <string>
+
+using json = nlohmann::json;
 
 static const char* CONFIG_PATH = "servers.json";
 
@@ -23,7 +29,8 @@ static void draw_server_list(
     const char* table_id, const char* child_id, const char* detail_id,
     const char* splitter_id, ImGuiIO& io,
     float& detail_height, bool show_remove,
-    bool& auto_refresh, float& refresh_interval)
+    bool& auto_refresh, float& refresh_interval,
+    int* add_favorite_idx = nullptr)
 {
     float splitter_thickness = 6.0f;
     float avail_height = ImGui::GetContentRegionAvail().y;
@@ -125,6 +132,38 @@ static void draw_server_list(
                 if (ImGui::Selectable(("##srv" + std::to_string(i)).c_str(), is_selected,
                                       ImGuiSelectableFlags_SpanAllColumns)) {
                     selected = is_selected ? -1 : i;
+                }
+                if (show_remove && ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
+                    ImGui::SetDragDropPayload("FAV_REORDER", &i, sizeof(int));
+                    std::string drag_label = se.info.name.empty()
+                        ? (se.info.address + ":" + std::to_string(se.info.port))
+                        : strip_ut_colors(se.info.name);
+                    ImGui::Text("Move: %s", drag_label.c_str());
+                    ImGui::EndDragDropSource();
+                }
+                if (show_remove && ImGui::BeginDragDropTarget()) {
+                    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("FAV_REORDER")) {
+                        int src = *static_cast<const int*>(payload->Data);
+                        int dst = i;
+                        if (src != dst) {
+                            ServerEntry tmp = std::move(servers[src]);
+                            servers.erase(servers.begin() + src);
+                            servers.insert(servers.begin() + dst, std::move(tmp));
+                            if (selected == src)
+                                selected = dst;
+                            else if (src < dst && selected > src && selected <= dst)
+                                --selected;
+                            else if (src > dst && selected >= dst && selected < src)
+                                ++selected;
+                        }
+                    }
+                    ImGui::EndDragDropTarget();
+                }
+                if (add_favorite_idx && ImGui::BeginPopupContextItem()) {
+                    if (ImGui::MenuItem("Add to Favorites")) {
+                        *add_favorite_idx = i;
+                    }
+                    ImGui::EndPopup();
                 }
                 TextUTOverlay(ImGui::GetWindowDrawList(), text_pos, raw_label);
 
@@ -255,8 +294,175 @@ static void draw_server_list(
     }
 }
 
-int main(int, char**) {
+#ifdef _WIN32
+#include <windows.h>
+static void hide_console() {
+    HWND hw = GetConsoleWindow();
+    if (hw) ShowWindow(hw, SW_HIDE);
+}
+#endif
+
+static void print_help(const char* prog) {
+    std::fprintf(stderr,
+        "Usage: %s [OPTIONS]\n"
+        "\n"
+        "Options:\n"
+        "  --help                Show this help message and exit\n"
+        "  --query <servers>     Query servers and output JSON to stdout\n"
+        "                        <servers> is a comma-separated list of host:port\n"
+        "                        If port is omitted, 7777 is assumed\n"
+        "  --file <path>         Write JSON output to a file instead of stdout\n"
+        "                        (used with --query)\n"
+        "\n"
+        "Examples:\n"
+        "  %s --query 192.168.1.1:7777,10.0.0.1,example.com:7778\n"
+        "  %s --query myserver.com\n"
+        "  %s --query myserver.com --file results.json\n"
+        "\n"
+        "If no options are given, the GUI server browser is launched.\n",
+        prog, prog, prog, prog);
+}
+
+static std::string strip_colors(const std::string& s) {
+    std::string result;
+    result.reserve(s.size());
+    for (size_t i = 0; i < s.size(); ++i) {
+        if (static_cast<unsigned char>(s[i]) == 0x1B && i + 3 < s.size()) {
+            i += 3;
+        } else {
+            result.push_back(s[i]);
+        }
+    }
+    return result;
+}
+
+static int run_query(const char* server_list, const char* output_file) {
     query_init();
+
+    // Parse comma-separated server list
+    std::vector<std::pair<std::string, uint16_t>> targets;
+    std::string input(server_list);
+    size_t pos = 0;
+    while (pos < input.size()) {
+        size_t comma = input.find(',', pos);
+        if (comma == std::string::npos) comma = input.size();
+        std::string token = input.substr(pos, comma - pos);
+        pos = comma + 1;
+
+        if (token.empty()) continue;
+
+        std::string host;
+        uint16_t port = 7777;
+        size_t colon = token.rfind(':');
+        if (colon != std::string::npos) {
+            host = token.substr(0, colon);
+            int p = std::atoi(token.substr(colon + 1).c_str());
+            if (p > 0 && p < 65536) port = static_cast<uint16_t>(p);
+        } else {
+            host = token;
+        }
+        if (!host.empty())
+            targets.push_back({host, port});
+    }
+
+    if (targets.empty()) {
+        std::fprintf(stderr, "Error: no valid servers specified\n");
+        query_cleanup();
+        return 1;
+    }
+
+    // Query each server and build JSON array
+    json results = json::array();
+    for (auto& [host, port] : targets) {
+        ServerInfo info = query_server(host, port);
+        json server;
+        server["address"] = info.address;
+        server["port"] = info.port;
+        server["name"] = strip_colors(info.name);
+        server["map_name"] = strip_colors(info.map_name);
+        server["map_title"] = strip_colors(info.map_title);
+        server["gametype"] = strip_colors(info.gametype);
+        server["num_players"] = info.num_players;
+        server["max_players"] = info.max_players;
+        server["ping"] = info.ping;
+        server["online"] = info.online;
+        server["status"] = info.status;
+
+        json player_list = json::array();
+        for (auto& p : info.players) {
+            player_list.push_back({
+                {"name", strip_colors(p.name)},
+                {"score", p.score},
+                {"team", p.team}
+            });
+        }
+        server["players"] = player_list;
+
+        json vars = json::object();
+        for (auto& [k, v] : info.variables) {
+            vars[strip_colors(k)] = strip_colors(v);
+        }
+        server["variables"] = vars;
+
+        results.push_back(server);
+    }
+
+    std::string json_str = results.dump(2) + "\n";
+
+    if (output_file) {
+        FILE* fp = fopen(output_file, "w");
+        if (!fp) {
+            std::fprintf(stderr, "Error: could not open file '%s' for writing\n", output_file);
+            query_cleanup();
+            return 1;
+        }
+        std::fwrite(json_str.data(), 1, json_str.size(), fp);
+        fclose(fp);
+        std::fprintf(stderr, "Wrote %zu bytes to %s\n", json_str.size(), output_file);
+    } else {
+        std::fwrite(json_str.data(), 1, json_str.size(), stdout);
+        fflush(stdout);
+    }
+
+    query_cleanup();
+    return 0;
+}
+
+int main(int argc, char** argv) {
+    // Handle CLI options before GUI init
+    const char* query_arg = nullptr;
+    const char* file_arg = nullptr;
+    bool show_help = false;
+    for (int i = 1; i < argc; ++i) {
+        std::string arg = argv[i];
+        if (arg == "--help" || arg == "-h") {
+            show_help = true;
+        } else if (arg == "--query" && i + 1 < argc) {
+            query_arg = argv[++i];
+        } else if (arg == "--file" && i + 1 < argc) {
+            file_arg = argv[++i];
+        }
+    }
+    if (show_help) {
+        print_help(argv[0]);
+        return 0;
+    }
+    if (query_arg) {
+        return run_query(query_arg, file_arg);
+    }
+    if (file_arg) {
+        std::fprintf(stderr, "Error: --file requires --query\n");
+        print_help(argv[0]);
+        return 1;
+    }
+
+    // No CLI args — launch GUI mode
+#ifdef _WIN32
+    hide_console();
+#endif
+
+    query_init();
+    SDL_SetMainReady();
 
     if (!SDL_Init(SDL_INIT_VIDEO)) {
         SDL_Log("SDL_Init failed: %s", SDL_GetError());
@@ -318,6 +524,12 @@ int main(int, char**) {
     static float inet_refresh_interval = 10.0f;
     static auto last_fav_refresh = std::chrono::steady_clock::now();
     static auto last_inet_refresh = std::chrono::steady_clock::now();
+    static bool fav_all_auto_refresh = false;
+    static float fav_all_refresh_interval = 30.0f;
+    static auto last_fav_all_refresh = std::chrono::steady_clock::now();
+    static const char* font_size_labels[] = { "Small", "Normal", "Large", "Extra Large" };
+    static const float font_size_scales[] = { 0.85f, 1.0f, 1.25f, 1.5f };
+    io.FontGlobalScale = font_size_scales[app.font_size_idx];
 
     while (running) {
         SDL_Event event;
@@ -341,6 +553,13 @@ int main(int, char**) {
                 last_fav_refresh = now;
             }
         }
+        if (fav_all_auto_refresh && !app.servers.empty()) {
+            float elapsed = std::chrono::duration<float>(now - last_fav_all_refresh).count();
+            if (elapsed >= fav_all_refresh_interval) {
+                app.refresh_all();
+                last_fav_all_refresh = now;
+            }
+        }
         if (inet_auto_refresh && app.internet_selected >= 0) {
             float elapsed = std::chrono::duration<float>(now - last_inet_refresh).count();
             if (elapsed >= inet_refresh_interval) {
@@ -360,6 +579,15 @@ int main(int, char**) {
                      ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
                      ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse |
                      ImGuiWindowFlags_NoBringToFrontOnFocus);
+
+        float combo_width = 120.0f;
+        ImGui::SameLine(ImGui::GetWindowWidth() - combo_width - 120.0f);
+        ImGui::Text("Font Size:");
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(combo_width);
+        if (ImGui::Combo("##FontSize", &app.font_size_idx, font_size_labels, 4)) {
+            io.FontGlobalScale = font_size_scales[app.font_size_idx];
+        }
 
         if (ImGui::BeginTabBar("MainTabs")) {
             // ---- Favorites Tab ----
@@ -385,6 +613,13 @@ int main(int, char**) {
                 if (ImGui::Button("Save")) {
                     app.save_servers(CONFIG_PATH);
                 }
+                ImGui::SameLine(0, 20);
+                ImGui::Checkbox("Auto Refresh All", &fav_all_auto_refresh);
+                ImGui::SameLine();
+                if (!fav_all_auto_refresh) ImGui::BeginDisabled();
+                ImGui::SetNextItemWidth(150);
+                ImGui::SliderFloat("##FavAllRefresh", &fav_all_refresh_interval, 10.0f, 120.0f, "%.0f s");
+                if (!fav_all_auto_refresh) ImGui::EndDisabled();
 
                 ImGui::Separator();
 
@@ -453,10 +688,16 @@ int main(int, char**) {
                 ImGui::Separator();
 
                 int prev_inet_sel = app.internet_selected;
+                int add_fav_idx = -1;
                 draw_server_list(app.internet_servers, app.internet_selected,
                     "InetServers", "InetServerList", "InetDetails", "##inetsplit",
                     io, inet_detail_height, false,
-                    inet_auto_refresh, inet_refresh_interval);
+                    inet_auto_refresh, inet_refresh_interval, &add_fav_idx);
+                if (add_fav_idx >= 0 && add_fav_idx < static_cast<int>(app.internet_servers.size())) {
+                    auto& se = app.internet_servers[add_fav_idx];
+                    app.add_server(se.info.address, se.info.port);
+                    app.save_servers(CONFIG_PATH);
+                }
                 // Auto-refresh when a new server is selected
                 if (app.internet_selected >= 0 && app.internet_selected != prev_inet_sel) {
                     app.refresh_internet_one(app.internet_selected);

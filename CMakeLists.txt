@@ -16,7 +16,9 @@ add_executable(utquery
 )
 
 if(WIN32)
-    set_target_properties(utquery PROPERTIES WIN32_EXECUTABLE TRUE)
+    # Console subsystem so CLI mode (--query, --help) works with pipes and redirects.
+    # The console window is hidden at startup when running in GUI mode.
+    set_target_properties(utquery PROPERTIES WIN32_EXECUTABLE FALSE)
 endif()
 
 target_link_libraries(utquery PRIVATE

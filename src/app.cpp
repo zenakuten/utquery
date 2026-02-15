@@ -49,6 +49,9 @@ void App::load_servers(const std::string& path) {
     if (master_servers.empty())
         master_servers = default_master_servers;
     master_selected = 0;
+
+    if (j.contains("font_size_idx"))
+        font_size_idx = std::clamp(j["font_size_idx"].get<int>(), 0, 3);
 }
 
 void App::save_servers(const std::string& path) const {
@@ -68,6 +71,8 @@ void App::save_servers(const std::string& path) const {
             {"port", ms.port}
         });
     }
+
+    j["font_size_idx"] = font_size_idx;
 
     std::ofstream f(path);
     if (f.is_open()) {

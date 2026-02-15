@@ -56,6 +56,9 @@ public:
     bool master_querying() const { return master_future_.valid(); }
     std::string master_status;
 
+    // UI settings
+    int font_size_idx = 1; // 0=Small, 1=Normal, 2=Large, 3=Extra Large
+
 private:
     std::future<MasterQueryResult> master_future_;
 };
