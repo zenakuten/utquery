@@ -9,6 +9,7 @@
 #include <imgui_impl_sdlrenderer3.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -21,7 +22,8 @@ static void draw_server_list(
     std::vector<ServerEntry>& servers, int& selected,
     const char* table_id, const char* child_id, const char* detail_id,
     const char* splitter_id, ImGuiIO& io,
-    float& detail_height, bool show_remove)
+    float& detail_height, bool show_remove,
+    bool& auto_refresh, float& refresh_interval)
 {
     float splitter_thickness = 6.0f;
     float avail_height = ImGui::GetContentRegionAvail().y;
@@ -184,6 +186,13 @@ static void draw_server_list(
                 std::string gt_plain = strip_ut_colors(se.info.gametype);
                 ImGui::Text("Gametype: %s", gt_plain.c_str());
             }
+            ImGui::SameLine(0, 30);
+            ImGui::Checkbox("Auto Refresh", &auto_refresh);
+            ImGui::SameLine();
+            if (!auto_refresh) ImGui::BeginDisabled();
+            ImGui::SetNextItemWidth(150);
+            ImGui::SliderFloat("##RefreshInterval", &refresh_interval, 10.0f, 60.0f, "%.0f s");
+            if (!auto_refresh) ImGui::EndDisabled();
 
             // Two columns: players on left, variables on right
             if (ImGui::BeginTable("DetailColumns", 2, ImGuiTableFlags_Resizable)) {
@@ -303,6 +312,12 @@ int main(int, char**) {
     static const int gametype_count = sizeof(gametypes) / sizeof(gametypes[0]);
     static float fav_detail_height = 250.0f;
     static float inet_detail_height = 250.0f;
+    static bool fav_auto_refresh = false;
+    static float fav_refresh_interval = 10.0f;
+    static bool inet_auto_refresh = false;
+    static float inet_refresh_interval = 10.0f;
+    static auto last_fav_refresh = std::chrono::steady_clock::now();
+    static auto last_inet_refresh = std::chrono::steady_clock::now();
 
     while (running) {
         SDL_Event event;
@@ -316,6 +331,23 @@ int main(int, char**) {
         }
 
         app.poll_results();
+
+        // Auto-refresh timers
+        auto now = std::chrono::steady_clock::now();
+        if (fav_auto_refresh && app.selected >= 0) {
+            float elapsed = std::chrono::duration<float>(now - last_fav_refresh).count();
+            if (elapsed >= fav_refresh_interval) {
+                app.refresh_one(app.selected);
+                last_fav_refresh = now;
+            }
+        }
+        if (inet_auto_refresh && app.internet_selected >= 0) {
+            float elapsed = std::chrono::duration<float>(now - last_inet_refresh).count();
+            if (elapsed >= inet_refresh_interval) {
+                app.refresh_internet_one(app.internet_selected);
+                last_inet_refresh = now;
+            }
+        }
 
         ImGui_ImplSDLRenderer3_NewFrame();
         ImGui_ImplSDL3_NewFrame();
@@ -359,9 +391,11 @@ int main(int, char**) {
                 int prev_fav_sel = app.selected;
                 draw_server_list(app.servers, app.selected,
                     "FavServers", "FavServerList", "FavDetails", "##favsplit",
-                    io, fav_detail_height, true);
+                    io, fav_detail_height, true,
+                    fav_auto_refresh, fav_refresh_interval);
                 if (app.selected >= 0 && app.selected != prev_fav_sel) {
                     app.refresh_one(app.selected);
+                    last_fav_refresh = std::chrono::steady_clock::now();
                 }
 
                 ImGui::EndTabItem();
@@ -421,10 +455,12 @@ int main(int, char**) {
                 int prev_inet_sel = app.internet_selected;
                 draw_server_list(app.internet_servers, app.internet_selected,
                     "InetServers", "InetServerList", "InetDetails", "##inetsplit",
-                    io, inet_detail_height, false);
+                    io, inet_detail_height, false,
+                    inet_auto_refresh, inet_refresh_interval);
                 // Auto-refresh when a new server is selected
                 if (app.internet_selected >= 0 && app.internet_selected != prev_inet_sel) {
                     app.refresh_internet_one(app.internet_selected);
+                    last_inet_refresh = std::chrono::steady_clock::now();
                 }
 
                 ImGui::EndTabItem();
