@@ -22,6 +22,11 @@ using socket_t = int;
 static constexpr socket_t SOCKET_INVALID = -1;
 #endif
 
+// Skip the 1-byte length prefix that UT2004 prepends to string fields.
+static std::string skip_length_prefix(const std::string& s) {
+    return s.size() > 1 ? s.substr(1) : s;
+}
+
 static std::string strip_control_chars(const std::string& s) {
     std::string result;
     result.reserve(s.size());
@@ -123,7 +128,7 @@ static void parse_players(ServerInfo& info, const uint8_t* data, int len) {
         int32_t score = read_int32(data + offset);
         offset += 4;
 
-        // Read null-terminated name (includes length-prefix byte, stripped later)
+        // Read null-terminated name (first byte is a length prefix, skip it)
         std::string name;
         while (offset < len && data[offset] != 0) {
             name.push_back(static_cast<char>(data[offset]));
@@ -131,7 +136,7 @@ static void parse_players(ServerInfo& info, const uint8_t* data, int len) {
         }
         if (offset < len) ++offset; // skip null
 
-        name = strip_control_chars(name);
+        name = strip_control_chars(skip_length_prefix(name));
 
         // 3 trailing int32 fields: ping(4) + statsid(4) + team_raw(4)
         if (offset + 12 > len)
@@ -158,10 +163,11 @@ static void parse_server_info(ServerInfo& info, const uint8_t* data, int len) {
 
     // Server info response has fields split by null bytes
     // Fields at indices: 15=server name, 16=map name, 17=gametype
+    // Each string field has a 1-byte length prefix that must be skipped.
     if (parts.size() > 17) {
-        info.name = strip_control_chars(parts[15]);
-        info.map_name = strip_control_chars(parts[16]);
-        info.gametype = strip_control_chars(parts[17]);
+        info.name = strip_control_chars(skip_length_prefix(parts[15]));
+        info.map_name = strip_control_chars(skip_length_prefix(parts[16]));
+        info.gametype = strip_control_chars(skip_length_prefix(parts[17]));
     }
 
     // Binary trailer follows the gametype string.

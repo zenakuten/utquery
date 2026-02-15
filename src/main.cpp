@@ -500,10 +500,8 @@ int main(int argc, char** argv) {
     bool running = true;
 
     // Internet tab state
-    static int gametype_idx = 0;
     struct GametypeEntry { const char* label; const char* classname; };
     static GametypeEntry gametypes[] = {
-        { "All",              "" },
         { "Deathmatch",       "xDeathMatch" },
         { "Team Deathmatch",  "xTeamGame" },
         { "Capture the Flag", "xCTFGame" },
@@ -514,7 +512,9 @@ int main(int argc, char** argv) {
         { "Invasion",         "Invasion" },
         { "Mutant",           "xMutantGame" },
         { "Last Man Standing","xLastManStandingGame" },
+        { "All",              "" },
     };
+    static int gametype_idx = 0;
     static const int gametype_count = sizeof(gametypes) / sizeof(gametypes[0]);
     static float fav_detail_height = 250.0f;
     static float inet_detail_height = 250.0f;
