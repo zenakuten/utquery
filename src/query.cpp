@@ -40,7 +40,13 @@ static std::string strip_control_chars(const std::string& s) {
             result.push_back(s[i + 3]);
             i += 3;
         } else if (c >= 32 && c != 127) {
-            result.push_back(static_cast<char>(c));
+            if (c >= 0x80) {
+                // Latin-1 to UTF-8: encode as 2-byte sequence
+                result.push_back(static_cast<char>(0xC0 | (c >> 6)));
+                result.push_back(static_cast<char>(0x80 | (c & 0x3F)));
+            } else {
+                result.push_back(static_cast<char>(c));
+            }
         }
     }
     return result;

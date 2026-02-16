@@ -168,22 +168,41 @@ public:
         int32_t count = save_num < 0 ? -save_num : save_num;
         if (count > 10000) { error_ = true; return {}; }
         if (save_num > 0) {
-            // ANSI
-            std::string result(count, '\0');
-            if (!read_bytes(result.data(), count)) return {};
-            // Strip null terminator
-            if (!result.empty() && result.back() == '\0')
-                result.pop_back();
+            // ANSI (Latin-1)
+            std::string raw(count, '\0');
+            if (!read_bytes(raw.data(), count)) return {};
+            if (!raw.empty() && raw.back() == '\0')
+                raw.pop_back();
+            // Convert Latin-1 to UTF-8
+            std::string result;
+            result.reserve(raw.size());
+            for (unsigned char c : raw) {
+                if (c >= 0x80) {
+                    result.push_back(static_cast<char>(0xC0 | (c >> 6)));
+                    result.push_back(static_cast<char>(0x80 | (c & 0x3F)));
+                } else {
+                    result.push_back(static_cast<char>(c));
+                }
+            }
             return result;
         } else {
-            // Unicode — read 2 bytes per char, convert to ASCII
+            // Unicode (UTF-16 LE) — convert to UTF-8
             std::string result;
             result.reserve(count);
             for (int32_t i = 0; i < count; ++i) {
                 uint16_t ch = read_word();
                 if (error_) return {};
-                if (ch != 0)
-                    result.push_back(static_cast<char>(ch & 0xFF));
+                if (ch == 0) continue;
+                if (ch < 0x80) {
+                    result.push_back(static_cast<char>(ch));
+                } else if (ch < 0x800) {
+                    result.push_back(static_cast<char>(0xC0 | (ch >> 6)));
+                    result.push_back(static_cast<char>(0x80 | (ch & 0x3F)));
+                } else {
+                    result.push_back(static_cast<char>(0xE0 | (ch >> 12)));
+                    result.push_back(static_cast<char>(0x80 | ((ch >> 6) & 0x3F)));
+                    result.push_back(static_cast<char>(0x80 | (ch & 0x3F)));
+                }
             }
             return result;
         }

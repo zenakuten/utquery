@@ -488,6 +488,13 @@ int main(int argc, char** argv) {
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     ImGui::StyleColorsDark();
 
+    // Load default font with Latin Supplement glyphs (U+0080-U+00FF)
+    // so Latin-1 characters from UT2004 servers render correctly.
+    static const ImWchar ranges[] = { 0x0020, 0x00FF, 0 };
+    ImFontConfig cfg;
+    cfg.GlyphRanges = ranges;
+    io.Fonts->AddFontDefault(&cfg);
+
     ImGui_ImplSDL3_InitForSDLRenderer(window, renderer);
     ImGui_ImplSDLRenderer3_Init(renderer);
 
