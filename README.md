@@ -51,7 +51,7 @@ git clone https://github.com/microsoft/vcpkg.git
 Then build:
 
 ```
-cmake -B build --fresh -DCMAKE_TOOLCHAIN_FILE=vcpkg/scripts/buildsystems/vcpkg.cmake
+cmake -B build --fresh -DCMAKE_TOOLCHAIN_FILE=src/vcpkg/scripts/buildsystems/vcpkg.cmake
 cmake --build build
 ```
 
