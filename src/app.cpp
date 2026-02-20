@@ -4,6 +4,10 @@
 #include <fstream>
 #include <nlohmann/json.hpp>
 
+#ifndef _WIN32
+#include <sys/stat.h>
+#endif
+
 using json = nlohmann::json;
 
 static const std::vector<App::MasterServer> default_master_servers = {
@@ -55,6 +59,15 @@ void App::load_servers(const std::string& path) {
 }
 
 void App::save_servers(const std::string& path) const {
+#ifndef _WIN32
+    // Ensure parent directory exists
+    auto slash = path.rfind('/');
+    if (slash != std::string::npos) {
+        std::string dir = path.substr(0, slash);
+        mkdir(dir.c_str(), 0755);
+    }
+#endif
+
     json j;
     j["servers"] = json::array();
     for (auto& se : servers) {
@@ -266,7 +279,11 @@ void App::query_master(const std::string& host, uint16_t port,
                        const std::string& gametype_filter) {
     if (master_future_.valid()) return; // already querying
     if (cdkey.empty()) {
-        master_status = "error: no cdkey (create a 'cdkey' file)";
+        master_status = "error: no cdkey (create a 'cdkey' file"
+#ifndef _WIN32
+            " in ~/.ut2004/, ~/.utquery/, or current dir"
+#endif
+            ")";
         return;
     }
     master_status = "querying master...";

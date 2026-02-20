@@ -18,9 +18,56 @@
 #include <cstring>
 #include <string>
 
+#ifndef _WIN32
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
+
 using json = nlohmann::json;
 
-static const char* CONFIG_PATH = "servers.json";
+#ifndef _WIN32
+// Return ~/.utquery/, creating the directory if it doesn't exist.
+static std::string get_config_dir() {
+    const char* home = getenv("HOME");
+    if (!home) home = ".";
+    std::string dir = std::string(home) + "/.utquery";
+    mkdir(dir.c_str(), 0755);
+    return dir + "/";
+}
+
+// Search for cdkey file in multiple locations, return the first found.
+static std::string find_cdkey_path() {
+    const char* home = getenv("HOME");
+    if (home) {
+        std::string paths[] = {
+            std::string(home) + "/.ut2004/cdkey",
+            std::string(home) + "/.utquery/cdkey",
+        };
+        for (auto& p : paths) {
+            if (access(p.c_str(), R_OK) == 0)
+                return p;
+        }
+    }
+    // Fall back to current directory
+    return "cdkey";
+}
+#endif
+
+static std::string get_config_path() {
+#ifdef _WIN32
+    return "servers.json";
+#else
+    return get_config_dir() + "servers.json";
+#endif
+}
+
+static std::string get_cdkey_path() {
+#ifdef _WIN32
+    return "cdkey";
+#else
+    return find_cdkey_path();
+#endif
+}
 
 // Render the server table + detail panel for a given server list.
 // table_id must be unique per tab. Returns remove_idx or -1.
@@ -499,8 +546,9 @@ int main(int argc, char** argv) {
     ImGui_ImplSDLRenderer3_Init(renderer);
 
     App app;
-    app.load_servers(CONFIG_PATH);
-    app.load_cdkey("cdkey");
+    std::string config_path = get_config_path();
+    app.load_servers(config_path);
+    app.load_cdkey(get_cdkey_path());
 
     char ip_buf[64] = "";
     int port_val = 7777;
@@ -618,7 +666,7 @@ int main(int argc, char** argv) {
                 }
                 ImGui::SameLine();
                 if (ImGui::Button("Save")) {
-                    app.save_servers(CONFIG_PATH);
+                    app.save_servers(config_path);
                 }
                 ImGui::SameLine(0, 20);
                 ImGui::Checkbox("Auto Refresh All", &fav_all_auto_refresh);
@@ -703,7 +751,7 @@ int main(int argc, char** argv) {
                 if (add_fav_idx >= 0 && add_fav_idx < static_cast<int>(app.internet_servers.size())) {
                     auto& se = app.internet_servers[add_fav_idx];
                     app.add_server(se.info.address, se.info.port);
-                    app.save_servers(CONFIG_PATH);
+                    app.save_servers(config_path);
                 }
                 // Auto-refresh when a new server is selected
                 if (app.internet_selected >= 0 && app.internet_selected != prev_inet_sel) {
@@ -726,7 +774,7 @@ int main(int argc, char** argv) {
         SDL_RenderPresent(renderer);
     }
 
-    app.save_servers(CONFIG_PATH);
+    app.save_servers(config_path);
 
     ImGui_ImplSDLRenderer3_Shutdown();
     ImGui_ImplSDL3_Shutdown();
