@@ -311,13 +311,37 @@ static void draw_server_list(
                 float sub_table_height = ImGui::GetContentRegionAvail().y;
                 if (ImGui::BeginTable("PlayerList", 3,
                         ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
-                        ImGuiTableFlags_ScrollY,
+                        ImGuiTableFlags_ScrollY | ImGuiTableFlags_Sortable,
                         ImVec2(0, sub_table_height))) {
                     ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
-                    ImGui::TableSetupColumn("Score", ImGuiTableColumnFlags_WidthFixed, 60.0f);
+                    ImGui::TableSetupColumn("Score", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_DefaultSort, 60.0f);
                     ImGui::TableSetupColumn("Team", ImGuiTableColumnFlags_WidthFixed, 70.0f);
                     ImGui::TableHeadersRow();
-                    for (auto& p : se.info.players) {
+
+                    // Build sorted index
+                    auto& players = se.info.players;
+                    std::vector<int> pidx(players.size());
+                    for (int pi = 0; pi < static_cast<int>(pidx.size()); ++pi) pidx[pi] = pi;
+                    if (ImGuiTableSortSpecs* ss = ImGui::TableGetSortSpecs()) {
+                        if (ss->SpecsCount > 0) {
+                            int scol = ss->Specs[0].ColumnIndex;
+                            bool asc = (ss->Specs[0].SortDirection == ImGuiSortDirection_Ascending);
+                            std::sort(pidx.begin(), pidx.end(),
+                                [&players, scol, asc](int a, int b) {
+                                    int cmp = 0;
+                                    switch (scol) {
+                                        case 0: cmp = players[a].name.compare(players[b].name); break;
+                                        case 1: cmp = players[a].score - players[b].score; break;
+                                        case 2: cmp = players[a].team - players[b].team; break;
+                                    }
+                                    return asc ? cmp < 0 : cmp > 0;
+                                });
+                        }
+                        ss->SpecsDirty = false;
+                    }
+
+                    for (int pi : pidx) {
+                        auto& p = players[pi];
                         ImGui::TableNextRow();
                         ImGui::TableSetColumnIndex(0);
                         ImVec4 team_col;
@@ -344,17 +368,36 @@ static void draw_server_list(
                 float var_table_height = ImGui::GetContentRegionAvail().y;
                 if (ImGui::BeginTable("VarList", 2,
                         ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
-                        ImGuiTableFlags_ScrollY,
+                        ImGuiTableFlags_ScrollY | ImGuiTableFlags_Sortable,
                         ImVec2(0, var_table_height))) {
-                    ImGui::TableSetupColumn("Key", ImGuiTableColumnFlags_WidthStretch);
+                    ImGui::TableSetupColumn("Key", ImGuiTableColumnFlags_WidthStretch | ImGuiTableColumnFlags_DefaultSort);
                     ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
                     ImGui::TableHeadersRow();
-                    for (auto& [k, v] : se.info.variables) {
+
+                    // Build sorted index from map
+                    std::vector<std::pair<const std::string*, const std::string*>> var_entries;
+                    for (auto& [k, v] : se.info.variables)
+                        var_entries.push_back({&k, &v});
+                    if (ImGuiTableSortSpecs* ss = ImGui::TableGetSortSpecs()) {
+                        if (ss->SpecsCount > 0) {
+                            int scol = ss->Specs[0].ColumnIndex;
+                            bool asc = (ss->Specs[0].SortDirection == ImGuiSortDirection_Ascending);
+                            std::sort(var_entries.begin(), var_entries.end(),
+                                [scol, asc](const auto& a, const auto& b) {
+                                    int cmp = (scol == 0) ? a.first->compare(*b.first)
+                                                          : a.second->compare(*b.second);
+                                    return asc ? cmp < 0 : cmp > 0;
+                                });
+                        }
+                        ss->SpecsDirty = false;
+                    }
+
+                    for (auto& [k, v] : var_entries) {
                         ImGui::TableNextRow();
                         ImGui::TableSetColumnIndex(0);
-                        ImGui::TextUnformatted(k.c_str());
+                        ImGui::TextUnformatted(k->c_str());
                         ImGui::TableSetColumnIndex(1);
-                        TextUT(v);
+                        TextUT(*v);
                     }
                     ImGui::EndTable();
                 }
