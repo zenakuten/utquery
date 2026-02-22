@@ -629,6 +629,10 @@ int main(int argc, char** argv) {
         return 1;
     }
 
+    if (SDL_GL_SetSwapInterval(1) < 0) {
+        printf("Warning: Unable to enable VSync! SDL Error: %s\n", SDL_GetError());
+    }
+
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
