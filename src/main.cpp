@@ -90,10 +90,11 @@ static void draw_server_list(
     }
 
     if (ImGui::BeginChild(child_id, ImVec2(0, table_height))) {
-        if (ImGui::BeginTable(table_id, show_remove ? 8 : 7,
-                ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
-                ImGuiTableFlags_Resizable | ImGuiTableFlags_ScrollY |
-                ImGuiTableFlags_Sortable)) {
+        ImGuiTableFlags table_flags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
+            ImGuiTableFlags_Resizable | ImGuiTableFlags_ScrollY;
+        if (!show_remove)
+            table_flags |= ImGuiTableFlags_Sortable;
+        if (ImGui::BeginTable(table_id, show_remove ? 8 : 7, table_flags)) {
 
             if (show_remove)
                 ImGui::TableSetupColumn("##Action", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoSort, 50.0f);
@@ -264,8 +265,7 @@ static void draw_server_list(
             ImGui::SameLine(0, 20);
             {
                 std::string map_plain = strip_ut_colors(se.info.map_name);
-                std::string title_plain = strip_ut_colors(se.info.map_title);
-                ImGui::Text("Map: %s (%s)", map_plain.c_str(), title_plain.c_str());
+                ImGui::Text("Map: %s", map_plain.c_str());
             }
             ImGui::SameLine(0, 20);
             {
@@ -288,27 +288,31 @@ static void draw_server_list(
                 ImGui::TableSetColumnIndex(0);
                 ImGui::Text("Players (%d/%d):", se.info.num_players, se.info.max_players);
                 float sub_table_height = ImGui::GetContentRegionAvail().y;
-                if (ImGui::BeginTable("PlayerList", 2,
+                if (ImGui::BeginTable("PlayerList", 3,
                         ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
                         ImGuiTableFlags_ScrollY,
                         ImVec2(0, sub_table_height))) {
                     ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
                     ImGui::TableSetupColumn("Score", ImGuiTableColumnFlags_WidthFixed, 60.0f);
+                    ImGui::TableSetupColumn("Team", ImGuiTableColumnFlags_WidthFixed, 70.0f);
                     ImGui::TableHeadersRow();
                     for (auto& p : se.info.players) {
                         ImGui::TableNextRow();
                         ImGui::TableSetColumnIndex(0);
                         ImVec4 team_col;
+                        const char* team_label;
                         switch (p.team) {
-                            case 0:  team_col = ImVec4(1.0f, 0.3f, 0.3f, 1.0f); break;
-                            case 1:  team_col = ImVec4(0.4f, 0.5f, 1.0f, 1.0f); break;
-                            case 2:  team_col = ImVec4(1.0f, 1.0f, 0.3f, 1.0f); break;
-                            default: team_col = ImVec4(1.0f, 1.0f, 1.0f, 1.0f); break;
+                            case 0:  team_col = ImVec4(1.0f, 0.3f, 0.3f, 1.0f); team_label = "Red"; break;
+                            case 1:  team_col = ImVec4(0.4f, 0.5f, 1.0f, 1.0f); team_label = "Blue"; break;
+                            case 2:  team_col = ImVec4(1.0f, 1.0f, 0.3f, 1.0f); team_label = "Spec"; break;
+                            default: team_col = ImVec4(1.0f, 1.0f, 1.0f, 1.0f); team_label = ""; break;
                         }
                         std::string plain_name = strip_ut_colors(p.name);
                         ImGui::TextColored(team_col, "%s", plain_name.c_str());
                         ImGui::TableSetColumnIndex(1);
                         ImGui::Text("%d", p.score);
+                        ImGui::TableSetColumnIndex(2);
+                        ImGui::TextColored(team_col, "%s", team_label);
                     }
                     ImGui::EndTable();
                 }

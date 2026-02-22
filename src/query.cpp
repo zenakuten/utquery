@@ -150,14 +150,15 @@ static void parse_players(ServerInfo& info, const uint8_t* data, int len) {
         int32_t team_raw = read_int32(data + offset + 8);
         offset += 12;
 
-        // team_raw == 0 means metadata entry (team scores, round info) — skip
-        if (team_raw == 0)
+        // team_raw == 0 with empty name means metadata entry (team scores, round info) — skip
+        if (team_raw == 0 && name.empty())
             continue;
 
         if (!name.empty()) {
             int team;
             if (team_raw == 0x20000000) team = 0;      // red
             else if (team_raw == 0x40000000) team = 1;  // blue
+            else if (team_raw == 0) team = 2;            // spectator (no team)
             else team = 2;                               // spectator/other
             info.players.push_back({name, score, team});
         }
@@ -227,7 +228,7 @@ ServerInfo query_server(const std::string& ip, uint16_t game_port) {
     addr.sin_port = htons(query_port);
     inet_pton(AF_INET, ip.c_str(), &addr.sin_addr);
 
-    uint8_t buf[2048];
+    uint8_t buf[16384];
 
     // Query 0x02: players
     int n = send_query(sock, addr, 0x02, buf, sizeof(buf));
