@@ -1,6 +1,6 @@
 # Maintainer: zenakuten
 pkgname=utquery-git
-pkgver=r15.fc3965e
+pkgver=r16.0624381
 pkgrel=1
 pkgdesc='UT2004 Server Browser'
 arch=('x86_64')
