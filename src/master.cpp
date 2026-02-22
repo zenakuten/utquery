@@ -392,23 +392,12 @@ static std::string ip_from_dword(uint32_t ip) {
 // Debug helpers
 // ---------------------------------------------------------------------------
 
-static void hex_dump(const char* label, const uint8_t* data, size_t len) {
-    std::fprintf(stderr, "master: %s (%zu bytes):", label, len);
-    for (size_t i = 0; i < len && i < 128; ++i) {
-        if (i % 16 == 0) std::fprintf(stderr, "\n  %04zx: ", i);
-        std::fprintf(stderr, "%02x ", data[i]);
-    }
-    if (len > 128) std::fprintf(stderr, "\n  ... (%zu more bytes)", len - 128);
-    std::fprintf(stderr, "\n");
-}
-
 // ---------------------------------------------------------------------------
 // Master server query implementation
 // ---------------------------------------------------------------------------
 
 #define FAIL(msg) do { \
     result.error = msg; \
-    std::fprintf(stderr, "master: %s\n", msg); \
     close_socket(sock); \
     return result; \
 } while(0)
@@ -423,22 +412,17 @@ MasterQueryResult query_master_server(
     socket_t sock = tcp_connect(master_host, master_port, 10);
     if (sock == SOCKET_INVALID) {
         result.error = "failed to connect to " + master_host;
-        std::fprintf(stderr, "master: %s\n", result.error.c_str());
         return result;
     }
-    std::fprintf(stderr, "master: connected to %s:%d\n",
-                 master_host.c_str(), master_port);
 
     std::vector<uint8_t> pkt;
 
     // ---- Step 1: Receive challenge ----
     if (!recv_packet(sock, pkt, 10))
         FAIL("failed to receive challenge");
-    hex_dump("challenge packet", pkt.data(), pkt.size());
 
     ReadBuffer challenge_buf(pkt.data(), pkt.size());
     std::string challenge = challenge_buf.read_fstring();
-    std::fprintf(stderr, "master: challenge = '%s'\n", challenge.c_str());
 
     // ---- Step 2: Send credentials ----
     {
@@ -447,8 +431,6 @@ MasterQueryResult query_master_server(
         std::string cdkey_hash = md5_hex(cdkey);
         // CDKeyResponse = MD5(cdkey + challenge)
         std::string cdkey_response = md5_hex(cdkey + challenge);
-        std::fprintf(stderr, "master: cdkey_hash = '%s'\n", cdkey_hash.c_str());
-        std::fprintf(stderr, "master: cdkey_response = '%s'\n", cdkey_response.c_str());
         wb.write_fstring(cdkey_hash);
         wb.write_fstring(cdkey_response);
         wb.write_fstring("UT2K4CLIENT");
@@ -460,7 +442,6 @@ MasterQueryResult query_master_server(
         wb.write_int32(30);
         wb.write_byte(0);
 
-        hex_dump("credentials packet", wb.data(), wb.size());
         if (!send_packet(sock, wb))
             FAIL("failed to send credentials");
     }
@@ -468,21 +449,18 @@ MasterQueryResult query_master_server(
     // ---- Step 3: Receive review result ----
     if (!recv_packet(sock, pkt, 10))
         FAIL("failed to receive review");
-    hex_dump("review packet", pkt.data(), pkt.size());
 
     ReadBuffer review_buf(pkt.data(), pkt.size());
     std::string review_result = review_buf.read_fstring();
-    std::fprintf(stderr, "master: review = '%s'\n", review_result.c_str());
 
     if (review_result != "APPROVED") {
         result.error = "rejected: " + review_result;
-        std::fprintf(stderr, "master: %s\n", result.error.c_str());
         close_socket(sock);
         return result;
     }
 
     int32_t mod_rev_level = review_buf.read_int32();
-    std::fprintf(stderr, "master: mod_rev_level = %d\n", mod_rev_level);
+    (void)mod_rev_level;
 
     // ---- Step 4: Send GlobalMD5 ----
     {
@@ -495,15 +473,12 @@ MasterQueryResult query_master_server(
     // ---- Step 5: Receive approval ----
     if (!recv_packet(sock, pkt, 10))
         FAIL("failed to receive approval");
-    hex_dump("approval packet", pkt.data(), pkt.size());
 
     ReadBuffer approval_buf(pkt.data(), pkt.size());
     std::string approval = approval_buf.read_fstring();
-    std::fprintf(stderr, "master: approval = '%s'\n", approval.c_str());
 
     if (approval != "VERIFIED") {
         result.error = "not verified: " + approval;
-        std::fprintf(stderr, "master: %s\n", result.error.c_str());
         close_socket(sock);
         return result;
     }
@@ -520,7 +495,6 @@ MasterQueryResult query_master_server(
             wb.write_fstring(gametype_filter);
             wb.write_byte(0); // QT_Equals
         }
-        hex_dump("query packet", wb.data(), wb.size());
         if (!send_packet(sock, wb))
             FAIL("failed to send query");
     }
@@ -528,13 +502,10 @@ MasterQueryResult query_master_server(
     // ---- Step 7: Receive result count ----
     if (!recv_packet(sock, pkt, 15))
         FAIL("failed to receive result count");
-    hex_dump("result count packet", pkt.data(), pkt.size());
 
     ReadBuffer count_buf(pkt.data(), pkt.size());
     int32_t result_count = count_buf.read_int32();
     uint8_t results_compressed = count_buf.read_byte();
-    std::fprintf(stderr, "master: result_count=%d compressed=%d\n",
-                 result_count, results_compressed);
 
     if (result_count <= 0) {
         result.error = "master returned 0 servers";
@@ -544,14 +515,8 @@ MasterQueryResult query_master_server(
 
     // ---- Step 8: Receive server entries ----
     for (int32_t i = 0; i < result_count; ++i) {
-        if (!recv_packet(sock, pkt, 15)) {
-            std::fprintf(stderr, "master: failed to receive server %d/%d\n",
-                         i + 1, result_count);
+        if (!recv_packet(sock, pkt, 15))
             break;
-        }
-
-        if (i == 0)
-            hex_dump("first server packet", pkt.data(), pkt.size());
 
         ReadBuffer srv_buf(pkt.data(), pkt.size());
         MasterServerEntry entry;
@@ -596,11 +561,6 @@ MasterQueryResult query_master_server(
                 if (!has_prefix) entry.map_name = "DOM-" + entry.map_name;
             }
 
-            if (i == 0)
-                std::fprintf(stderr, "master: first server: %s:%d '%s' map='%s' gt='%s' %d/%d\n",
-                    entry.ip.c_str(), entry.port, entry.name.c_str(),
-                    entry.map_name.c_str(), entry.game_type.c_str(),
-                    entry.current_players, entry.max_players);
         } else {
             entry.ip = srv_buf.read_fstring();
             entry.port = static_cast<uint16_t>(srv_buf.read_int32());
@@ -621,7 +581,6 @@ MasterQueryResult query_master_server(
     }
 
     close_socket(sock);
-    std::fprintf(stderr, "master: received %zu servers\n", result.servers.size());
     return result;
 }
 

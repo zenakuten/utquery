@@ -1,5 +1,6 @@
 #include "app.h"
 
+#include <algorithm>
 #include <chrono>
 #include <fstream>
 #include <nlohmann/json.hpp>
@@ -32,13 +33,21 @@ void App::load_servers(const std::string& path) {
 
     servers.clear();
     selected = -1;
+    int ord = 0;
     for (auto& entry : j["servers"]) {
         ServerEntry se;
         se.info.address = entry.value("address", "");
         se.info.port = entry.value("port", 7777);
         se.info.status = "idle";
+        se.order = entry.value("order", ord);
         servers.push_back(std::move(se));
+        ++ord;
     }
+    std::sort(servers.begin(), servers.end(),
+        [](const ServerEntry& a, const ServerEntry& b) { return a.order < b.order; });
+    // Normalize order values
+    for (int i = 0; i < static_cast<int>(servers.size()); ++i)
+        servers[i].order = i + 1;
 
     master_servers.clear();
     if (j.contains("master_servers")) {
@@ -70,10 +79,17 @@ void App::save_servers(const std::string& path) const {
 
     json j;
     j["servers"] = json::array();
-    for (auto& se : servers) {
+    // Save in user-defined order
+    std::vector<const ServerEntry*> ordered;
+    for (auto& se : servers)
+        ordered.push_back(&se);
+    std::sort(ordered.begin(), ordered.end(),
+        [](const ServerEntry* a, const ServerEntry* b) { return a->order < b->order; });
+    for (auto* se : ordered) {
         j["servers"].push_back({
-            {"address", se.info.address},
-            {"port", se.info.port}
+            {"address", se->info.address},
+            {"port", se->info.port},
+            {"order", se->order}
         });
     }
 
@@ -98,6 +114,11 @@ void App::add_server(const std::string& ip, uint16_t port) {
     se.info.address = ip;
     se.info.port = port;
     se.info.status = "idle";
+    // Assign order after last entry
+    int max_order = 0;
+    for (auto& s : servers)
+        if (s.order > max_order) max_order = s.order;
+    se.order = max_order + 1;
     servers.push_back(std::move(se));
 }
 

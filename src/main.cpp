@@ -91,13 +91,15 @@ static void draw_server_list(
 
     if (ImGui::BeginChild(child_id, ImVec2(0, table_height))) {
         ImGuiTableFlags table_flags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
-            ImGuiTableFlags_Resizable | ImGuiTableFlags_ScrollY;
-        if (!show_remove)
-            table_flags |= ImGuiTableFlags_Sortable;
-        if (ImGui::BeginTable(table_id, show_remove ? 8 : 7, table_flags)) {
+            ImGuiTableFlags_Resizable | ImGuiTableFlags_ScrollY |
+            ImGuiTableFlags_Sortable;
+        int num_cols = show_remove ? 9 : 7;
+        if (ImGui::BeginTable(table_id, num_cols, table_flags)) {
 
-            if (show_remove)
+            if (show_remove) {
                 ImGui::TableSetupColumn("##Action", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoSort, 50.0f);
+                ImGui::TableSetupColumn("Order", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_DefaultSort, 45.0f);
+            }
             ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
             ImGui::TableSetupColumn("Map", ImGuiTableColumnFlags_WidthStretch);
             ImGui::TableSetupColumn("Gametype", ImGuiTableColumnFlags_WidthFixed, 120.0f);
@@ -108,11 +110,18 @@ static void draw_server_list(
             ImGui::TableHeadersRow();
 
             // Sorting
+            int active_sort_col = 0; // default
             if (ImGuiTableSortSpecs* sort_specs = ImGui::TableGetSortSpecs()) {
+                if (sort_specs->SpecsCount > 0) {
+                    const auto& spec0 = sort_specs->Specs[0];
+                    active_sort_col = show_remove ? spec0.ColumnIndex - 2 : spec0.ColumnIndex;
+                }
                 if (sort_specs->SpecsDirty && sort_specs->SpecsCount > 0) {
                     const auto& spec = sort_specs->Specs[0];
-                    // Map column index to data field (offset by 1 if Action column present)
-                    int col = show_remove ? spec.ColumnIndex - 1 : spec.ColumnIndex;
+                    // Map column index to data field
+                    // Favorites: Action(0), Order(1), Name(2), Map(3), ...
+                    // Internet:  Name(0), Map(1), Gametype(2), ...
+                    int col = show_remove ? spec.ColumnIndex - 2 : spec.ColumnIndex;
                     bool ascending = (spec.SortDirection == ImGuiSortDirection_Ascending);
                     // Remember which server is selected so we can track it
                     ServerEntry* sel_ptr = (selected >= 0 && selected < static_cast<int>(servers.size()))
@@ -127,6 +136,7 @@ static void draw_server_list(
                         [col, ascending](const ServerEntry& a, const ServerEntry& b) {
                             int cmp = 0;
                             switch (col) {
+                                case -1: cmp = a.order - b.order; break;  // Order column
                                 case 0: cmp = a.info.name.compare(b.info.name); break;
                                 case 1: cmp = a.info.map_name.compare(b.info.map_name); break;
                                 case 2: cmp = a.info.gametype.compare(b.info.gametype); break;
@@ -169,8 +179,14 @@ static void draw_server_list(
                     }
                 }
 
+                // Order column (favorites only)
+                if (show_remove) {
+                    ImGui::TableSetColumnIndex(1);
+                    ImGui::Text("%d", se.order);
+                }
+
                 // Name column — clickable to select
-                int name_col = show_remove ? 1 : 0;
+                int name_col = show_remove ? 2 : 0;
                 ImGui::TableSetColumnIndex(name_col);
                 bool is_selected = (selected == i);
                 std::string raw_label = se.info.name.empty()
@@ -203,6 +219,11 @@ static void draw_server_list(
                                 --selected;
                             else if (src > dst && selected >= dst && selected < src)
                                 ++selected;
+                            // Only reassign order values when sorted by Order column
+                            if (active_sort_col == -1) {
+                                for (int k = 0; k < static_cast<int>(servers.size()); ++k)
+                                    servers[k].order = k + 1;
+                            }
                         }
                     }
                     ImGui::EndDragDropTarget();

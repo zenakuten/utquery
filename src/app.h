@@ -13,6 +13,7 @@ struct ServerEntry {
     ServerInfo info;
     QueryState state = QueryState::Idle;
     std::future<ServerInfo> future;
+    int order = 0;
 };
 
 class App {
