@@ -5,10 +5,10 @@
 ## Running
 
 ### Linux
-You will need a valid `cdkey` file (not provided) in the same folder as the executable for the internet tab to function. You should be able to find it at `~/.ut2004/System/cdkey`
+The app will read your installed key from `~/.ut2004/System/cdkey`, if not found will try to read from `cdkey` file.  Configuration is stored in `~/.utquery`
 
 ### Windows
-The app will read your installed key, if not found will try to read from `cdkey` file.  
+The app will read your installed key, if not found will try to read from `cdkey` file. Configuration is stored in the application install folder.
 
 ### Command line options
 
