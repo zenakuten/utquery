@@ -5,7 +5,7 @@
 ## Running
 
 ### Linux
-You will need a valid `cdkey` file (not provided) in the same folder as the executable for the internet tab to function.
+You will need a valid `cdkey` file (not provided) in the same folder as the executable for the internet tab to function. You should be able to find it at `~/.ut2004/System/cdkey`
 
 ### Windows
 The app will read your installed key, if not found will try to read from `cdkey` file.  
