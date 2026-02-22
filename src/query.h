@@ -18,7 +18,7 @@ struct ServerInfo {
     int32_t max_players = 0, num_players = 0, ping = 0, flags = 0;
     uint8_t skill = 0;
     std::vector<PlayerInfo> players;
-    std::map<std::string, std::string> variables;
+    std::multimap<std::string, std::string> variables;
     bool online = false;
     std::string status = "idle";
 };

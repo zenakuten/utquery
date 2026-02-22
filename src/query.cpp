@@ -204,7 +204,7 @@ static void parse_variables(ServerInfo& info, const uint8_t* data, int len) {
         std::string key = strip_control_chars(parts[i]);
         std::string val = strip_control_chars(parts[i + 1]);
         if (!key.empty()) {
-            info.variables[key] = val;
+            info.variables.emplace(key, val);
         }
     }
 }
@@ -228,7 +228,7 @@ ServerInfo query_server(const std::string& ip, uint16_t game_port) {
     addr.sin_port = htons(query_port);
     inet_pton(AF_INET, ip.c_str(), &addr.sin_addr);
 
-    uint8_t buf[16384];
+    uint8_t buf[65535];
 
     // Query 0x02: players
     int n = send_query(sock, addr, 0x02, buf, sizeof(buf));

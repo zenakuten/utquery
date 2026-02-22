@@ -1,4 +1,5 @@
 #include "app.h"
+#include "icon_data.h"
 #include "query.h"
 #include "utcolor.h"
 
@@ -513,9 +514,9 @@ static int run_query(const char* server_list, const char* output_file) {
         }
         server["players"] = player_list;
 
-        json vars = json::object();
+        json vars = json::array();
         for (auto& [k, v] : info.variables) {
-            vars[strip_colors(k)] = strip_colors(v);
+            vars.push_back({{"key", strip_colors(k)}, {"value", strip_colors(v)}});
         }
         server["variables"] = vars;
 
@@ -589,6 +590,37 @@ int main(int argc, char** argv) {
     if (!window) {
         SDL_Log("SDL_CreateWindow failed: %s", SDL_GetError());
         return 1;
+    }
+
+    // Load embedded ICO as window icon
+    // ICO format: 6-byte header, then 16-byte directory entries, then image data.
+    // Each image entry is a BMP without the 14-byte file header (BITMAPINFOHEADER + pixels).
+    {
+        const uint8_t* ico = icon_ico_data;
+        int count = ico[4] | (ico[5] << 8);
+        if (count > 0) {
+            // Use first entry: directory at offset 6
+            int w = ico[6] ? ico[6] : 256;
+            int h = ico[7] ? ico[7] : 256;
+            uint32_t data_size = ico[14] | (ico[15] << 8) | (ico[16] << 16) | (ico[17] << 24);
+            uint32_t data_off  = ico[18] | (ico[19] << 8) | (ico[20] << 16) | (ico[21] << 24);
+
+            const uint8_t* bmp = ico + data_off;
+            // Skip BITMAPINFOHEADER (40 bytes) to get to pixel data
+            uint32_t header_size = bmp[0] | (bmp[1] << 8) | (bmp[2] << 16) | (bmp[3] << 24);
+            const uint8_t* pixels = bmp + header_size;
+            // ICO BMP stores XOR mask (BGRA rows bottom-up) then AND mask; we only need XOR
+            SDL_Surface* icon = SDL_CreateSurface(w, h, SDL_PIXELFORMAT_BGRA32);
+            if (icon) {
+                // Flip rows: ICO stores bottom-up
+                int pitch = w * 4;
+                auto* dst = static_cast<uint8_t*>(icon->pixels);
+                for (int y = 0; y < h; ++y)
+                    std::memcpy(dst + y * icon->pitch, pixels + (h - 1 - y) * pitch, pitch);
+                SDL_SetWindowIcon(window, icon);
+                SDL_DestroySurface(icon);
+            }
+        }
     }
 
     SDL_Renderer* renderer = SDL_CreateRenderer(window, nullptr);
