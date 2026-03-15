@@ -230,15 +230,53 @@ ServerInfo query_server(const std::string& ip, uint16_t game_port) {
 
     uint8_t buf[65535];
 
-    // Query 0x02: players
-    int n = send_query(sock, addr, 0x02, buf, sizeof(buf));
-    if (n > 0) {
-        parse_players(info, buf, n);
+    // Query 0x02: players — UT2004 may split across multiple UDP packets
+    {
+        uint8_t packet[5] = {0x78, 0x00, 0x00, 0x00, 0x02};
+        sendto(sock, reinterpret_cast<const char*>(packet), 5, 0,
+               reinterpret_cast<const sockaddr*>(&addr), sizeof(addr));
+
+        // Collect all player response packets until timeout
+        auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+        bool got_first = false;
+        for (;;) {
+            auto now = std::chrono::steady_clock::now();
+            auto remaining = std::chrono::duration_cast<std::chrono::microseconds>(deadline - now);
+            if (remaining.count() <= 0) break;
+
+            fd_set fds;
+            FD_ZERO(&fds);
+            FD_SET(sock, &fds);
+            timeval tv;
+            // After first packet, use short timeout to catch follow-up packets
+            if (got_first) {
+                tv.tv_sec = 0;
+                tv.tv_usec = 200000; // 200ms between packets
+            } else {
+                tv.tv_sec = static_cast<long>(remaining.count() / 1000000);
+                tv.tv_usec = static_cast<long>(remaining.count() % 1000000);
+            }
+
+#ifdef _WIN32
+            int sel = select(0, &fds, nullptr, nullptr, &tv);
+#else
+            int sel = select(sock + 1, &fds, nullptr, nullptr, &tv);
+#endif
+            if (sel <= 0) break;
+
+            int n = recvfrom(sock, reinterpret_cast<char*>(buf), static_cast<int>(sizeof(buf)), 0,
+                             nullptr, nullptr);
+            if (n < 5) continue;
+            if (buf[4] != 0x02) continue; // drain stale packets
+
+            parse_players(info, buf, n);
+            got_first = true;
+        }
     }
 
     // Query 0x00: server info — measure ping from this single round-trip
     auto ping_start = std::chrono::steady_clock::now();
-    n = send_query(sock, addr, 0x00, buf, sizeof(buf));
+    int n = send_query(sock, addr, 0x00, buf, sizeof(buf));
     auto ping_end = std::chrono::steady_clock::now();
     if (n > 0) {
         parse_server_info(info, buf, n);
