@@ -8,4 +8,8 @@ utquery/
 imgui.ini
 utquery-git-*.tar.zst
 src/vcpkg
+src/imgui-*/
+src/json-*/
 servers.json
+imgui-*.tar.gz
+nlohmann-json-*.tar.gz
