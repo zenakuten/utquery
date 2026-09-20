@@ -1,8 +1,8 @@
 #include "query.h"
 
 #ifdef _WIN32
-#include <WinSock2.h>
-#include <WS2tcpip.h>
+#include <winsock2.h>
+#include <ws2tcpip.h>
 #else
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -131,8 +131,7 @@ static void parse_players(ServerInfo& info, const uint8_t* data, int len) {
 
     int offset = 5; // skip header
     while (offset + 4 < len) {
-        int32_t score = read_int32(data + offset);
-        offset += 4;
+        offset += 4; // player number
 
         // Read null-terminated name (first byte is a length prefix, skip it)
         std::string name;
@@ -144,9 +143,10 @@ static void parse_players(ServerInfo& info, const uint8_t* data, int len) {
 
         name = strip_control_chars(skip_length_prefix(name));
 
-        // 3 trailing int32 fields: ping(4) + statsid(4) + team_raw(4)
+        // 3 trailing int32 fields: ping(4) + score(4) + statsid/team flags(4)
         if (offset + 12 > len)
             break;
+        int32_t score = read_int32(data + offset + 4);
         int32_t team_raw = read_int32(data + offset + 8);
         offset += 12;
 

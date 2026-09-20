@@ -1,4 +1,6 @@
 build/
+build-win-release/
+dist/
 .fuse_*
 settings.local.json
 pkg/
